@@ -1,0 +1,92 @@
+# ============================================================
+# TTS 语音合成配置 - 硅基流动 MOSS-TTSD-v0.5 (双人对话专用)
+# ============================================================
+# MOSS-TTSD 是复旦大学开源的双人对话语音合成模型
+# 
+# 特点:
+#   - 一次请求生成完整的双人对话音频
+#   - 支持零样本语音克隆 (上传参考音频克隆声音)
+#   - 通过 [S1] [S2] 标签区分说话人
+#
+# 使用场景:
+#   - AI 播客生成
+#   - 对话式内容创作
+#   - 有声书对话场景
+#
+# 使用方法:
+#   python tts_generator.py 对话文件.md -c configs/config_moss_ttsd.yaml
+# ============================================================
+
+provider: "siliconflow"
+
+api:
+  api_key: "YOUR_API_KEY_HERE"
+  base_url: "https://api.siliconflow.cn"
+  
+  # 固定使用 MOSS-TTSD 模型
+  model: "fnlp/MOSS-TTSD-v0.5"
+
+# ---------------------- 音色配置 ----------------------
+# MOSS-TTSD 使用 references 字段指定两个说话人的声音
+# 支持两种方式:
+#   1. 系统预置音色 (如下所示)
+#   2. 上传参考音频进行语音克隆
+#
+voices:
+  # 说话人 1 (通常对应对话中的 male)
+  male:
+    # 使用系统预置音色 + 参考音频组合
+    # 这里使用 references 指定两个说话人的声音
+    
+    # 方式一：使用系统预置音色（推荐新手）
+    # 可用的系统音色: alex, benjamin, charles, david (男声)
+    #                anna, bella, claire, diana (女声)
+    voice: "fnlp/MOSS-TTSD-v0.5:alex"
+    
+    # 方式二：使用参考音频进行语音克隆（高级）
+    # 取消下面注释并填写参考音频信息
+    # references:
+    #   # 说话人 1 (S1) 的参考音频
+    #   - audio: "https://example.com/speaker1_sample.mp3"
+    #     text: "这是说话人1的参考音频对应的文字内容，建议8-10秒"
+    #   # 说话人 2 (S2) 的参考音频
+    #   - audio: "https://example.com/speaker2_sample.mp3"
+    #     text: "这是说话人2的参考音频对应的文字内容，建议8-10秒"
+    
+    # 音频输出格式
+    response_format: "wav"
+    
+    # 语速调节: 0.25 - 4.0
+    speed: 1.0
+    
+    # 音量增益 (dB): -10 - 10
+    gain: 0.0
+    
+    # 最大token数（控制生成长度）
+    max_tokens: 1600
+  
+  # 说话人 2 (通常对应对话中的 female)
+  # 注意: MOSS-TTSD 是双人模型，male 配置里的 references 
+  # 已经包含两个说话人的声音，这里只做备用配置
+  female:
+    voice: "fnlp/MOSS-TTSD-v0.5:anna"
+    response_format: "wav"
+    sample_rate: 44100
+    speed: 1.0
+    gain: 0.0
+
+# ---------------------- 输出配置 ----------------------
+output:
+  format: "wav"
+  output_dir: "./audio_output"
+  prefix: "moss_dialogue"
+  merge_audio: false
+  silence_between: 0.5
+
+# ---------------------- 文本处理配置 ----------------------
+# 注意: 对于 MOSS-TTSD，文本中需要包含 [S1] 和 [S2] 标签
+# 示例: "[S1]你好，我是主持人。[S2]你好，很高兴来到这里。"
+text_processing:
+  max_text_length: 2000  # MOSS 支持较长的文本
+  remove_parentheses: true
+  localize_figures: true

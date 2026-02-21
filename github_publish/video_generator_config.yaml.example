@@ -1,0 +1,64 @@
+# 视频生成器配置文件
+# 复制此文件为 video_generator_config.yaml 并修改为你的设置
+
+# ==================== 输入输出设置 ====================
+# 音频文件目录（tts_generator.py 生成的音频所在目录）
+audio_dir: "audio_output"
+
+# Markdown 文件路径（用于提取对话文本）
+markdown_file: "文献解读对话文案-2.md"
+
+# 输出目录
+output_dir: "output"
+
+# 输出视频文件名（留空则自动生成：podcast_YYYYMMDD_HHMMSS.mp4）
+output_filename: ""
+
+# ==================== 视频设置 ====================
+# 分辨率
+resolution:
+  width: 1920
+  height: 1080
+
+# 帧率
+fps: 30
+
+# ==================== 背景设置 ====================
+# 背景类型: gradient(渐变) | color(纯色) | image(图片)
+background_type: "gradient"
+
+# 图片背景路径（当 background_type 为 image 时必填）
+# 例如: "./background.jpg" 或 "./my_bg.png"
+background_image: ""
+
+# ==================== 片头标题设置 ====================
+# 显示片头
+show_intro: true
+
+# 主标题（支持中文，留空则使用 markdown 文件名）
+title: ""
+
+# 副标题
+subtitle: "对话式科普播客"
+
+# ==================== 段落间隔设置 ====================
+# 对话段落间的过渡时间（秒）
+transition_duration: 0.5
+
+# ==================== 头像设置 ====================
+# 男声头像路径（留空使用默认 male.png）
+male_avatar: "male.png"
+
+# 女声头像路径（留空使用默认 female.png）
+female_avatar: "female.png"
+
+# 头像显示名称
+male_name: "Alex"
+female_name: "Cherry"
+
+# ==================== 字幕样式设置 ====================
+# 字幕样式: default(默认深色) | galgame(GalGame风格半透明白色)
+subtitle_style: "default"
+
+# 字体大小
+font_size: 40

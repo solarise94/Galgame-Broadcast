@@ -1,0 +1,126 @@
+# ============================================================
+# TTS 语音合成配置 - 硅基流动 SiliconFlow TTS
+# ============================================================
+# 本配置文件仅包含 SiliconFlow TTS 所需的配置项
+# 支持模型: IndexTTS2, CosyVoice2-0.5B, MOSS-TTSD
+# 
+# 使用步骤:
+#   1. 在硅基流动控制台获取 API Key
+#      https://cloud.siliconflow.cn/account/ak
+#   2. 填写下面的 api_key
+#   3. 选择要使用的模型 (默认 IndexTTS2)
+#   4. 运行: python tts_generator.py 你的文件.md -c config_siliconflow.yaml
+# ============================================================
+
+# 提供商标识 (固定为 siliconflow，无需修改)
+provider: "siliconflow"
+
+# ---------------------- API 配置 ----------------------
+api:
+  # 硅基流动 API Key
+  # 获取地址: https://cloud.siliconflow.cn/account/ak
+  api_key: "YOUR_API_KEY_HERE"
+  
+  # API 接口地址 (无需修改)
+  base_url: "https://api.siliconflow.cn"
+  
+  # TTS 模型选择
+  #
+  # 【IndexTTS2】IndexTeam/IndexTTS-2
+  #   - B站开源，零样本语音克隆
+  #   - 支持参考音频克隆任意声音
+  #   - 适合: 想要克隆特定声音的场景
+  #
+  # 【CosyVoice2】FunAudioLLM/CosyVoice2-0.5B
+  #   - 阿里开源，支持情感控制
+  #   - 支持跨语言合成 (中/英/日/韩/粤语等)
+  #   - 适合: 需要情感表达或多语言的场景
+  #
+  # 【MOSS-TTSD】fnlp/MOSS-TTSD-v0.5
+  #   - 复旦开源，支持双人对话
+  #   - 可一次生成两个说话人的对话音频
+  #   - 适合: AI播客、对话场景
+  #
+  model: "IndexTeam/IndexTTS-2"
+
+# ---------------------- 音色配置 ----------------------
+# 注意: 不同模型支持的音色不同
+#
+# IndexTTS2 / CosyVoice2 系统预置音色:
+#   男声: alex (沉稳), benjamin (低沉), charles (磁性), david (欢快)
+#   女声: anna (沉稳), bella (激情), claire (温柔), diana (欢快)
+#
+# 使用格式: 模型名:音色名，如 "FunAudioLLM/CosyVoice2-0.5B:alex"
+# 或者直接写音色名，如 "alex"
+#
+voices:
+  # 男声配置
+  male:
+    # 系统预置音色: alex / benjamin / charles / david
+    voice: "alex"
+    
+    # 音频输出格式: mp3 / wav / pcm / opus
+    response_format: "wav"
+    
+    # 采样率 (不同格式支持范围不同)
+    # wav/pcm: 8000/16000/24000/32000/44100 (默认44100)
+    # mp3: 32000/44100 (默认44100)
+    # opus: 48000
+    sample_rate: 44100
+    
+    # 语速调节: 0.25 - 4.0 (1.0为正常语速)
+    speed: 1.0
+    
+    # 音量增益 (dB): -10 - 10 (0为原音量)
+    gain: 0.0
+    
+    # 【高级】声音克隆参考音频 (可选)
+    # 如需克隆特定声音，提供参考音频URL和对应文本
+    # references:
+    #   - audio: "https://example.com/voice_sample.mp3"
+    #     text: "参考音频对应的文字内容，建议8-10秒"
+  
+  # 女声配置
+  female:
+    # 系统预置音色: anna / bella / claire / diana
+    voice: "diana"
+    
+    # 音频输出格式
+    response_format: "wav"
+    
+    # 采样率
+    sample_rate: 44100
+    
+    # 语速调节
+    speed: 1.0
+    
+    # 音量增益
+    gain: 0.0
+
+# ---------------------- 输出配置 ----------------------
+output:
+  # 输出音频格式: wav 或 mp3
+  format: "wav"
+  
+  # 输出目录
+  output_dir: "./audio_output_indextts2"
+  
+  # 文件名前缀
+  prefix: "dialogue"
+  
+  # 是否合并所有片段为一个完整音频文件
+  merge_audio: false
+  
+  # 片段间的静音时长（秒）
+  silence_between: 0.5
+
+# ---------------------- 文本处理配置 ----------------------
+text_processing:
+  # 最大文本长度（字符数），超过会自动分段
+  max_text_length: 500
+  
+  # 是否移除文本中的括号内容
+  remove_parentheses: true
+  
+  # 是否将"Figure X"替换为"图X"
+  localize_figures: true

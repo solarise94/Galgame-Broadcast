@@ -1,0 +1,159 @@
+# ============================================================
+# TTS 语音合成配置 - MiniMax Speech
+# ============================================================
+# 本配置文件仅包含 MiniMax Speech 所需的配置项
+# 
+# MiniMax 官方文档: https://platform.minimax.io/docs/api-reference/speech-t2a-http
+# ============================================================
+
+# 提供商标识 (固定为 minimax，无需修改)
+provider: "minimax"
+
+# ---------------------- API 配置 ----------------------
+api:
+  # MiniMax API Key
+  # 获取地址: https://platform.minimax.io/
+  api_key: "YOUR_API_KEY_HERE"
+  
+  # MiniMax Group ID (部分账户需要)
+  # 在 MiniMax 平台创建应用后获取
+  group_id: ""
+  
+  # API 接口地址
+  base_url: "https://api.minimax.chat"
+  
+  # TTS 模型选择
+  # 
+  # 【推荐】speech-2.6-hd
+  #   - 高清语音合成
+  #   - 音质优秀，自然度高
+  #   - 适合内容生产
+  #
+  # 【快速】speech-2.6-turbo
+  #   - 快速语音合成
+  #   - 延迟低，适合实时场景
+  #
+  # 【其他可选】
+  #   - speech-02-hd / speech-02-turbo
+  #   - speech-01-hd / speech-01-turbo
+  #
+  model: "speech-2.8-hd"
+
+# ---------------------- 音色配置 ----------------------
+voices:
+  # 男声配置
+  male:
+    # MiniMax 中文音色列表 (获取最新列表: https://platform.minimaxi.com/docs/api-reference/voice-management-get)
+    #   Chinese (Mandarin)_Reliable_Executive  - 沉稳高管男声 (推荐)
+    voice_id: "Chinese (Mandarin)_Gentleman"
+    
+    # 语速 (0.5 ~ 2.0, 默认 1.0)
+    speed: 1.1
+    
+    # 音量 (0 ~ 10, 默认 1.0)
+    vol: 1.0
+    
+    # 音调 (-12 ~ 12, 默认 0)
+    pitch: 0
+    
+    # 音频设置
+    sample_rate: 32000
+    bitrate: 128000
+    format: "mp3"  # 可选: mp3, wav, pcm
+    channel: 1
+    
+    # 语言增强 (可选)
+    # language_boost: "auto"
+    
+    # 声音修饰 (可选)
+    # voice_modify:
+    #   pitch: 0
+    #   intensity: 0
+    #   timbre: 0
+    #   sound_effects: "spacious_echo"  # 可选: spacious_echo, none
+  
+  # 女声配置
+  female:
+    # MiniMax 中文音色列表 (获取最新列表: https://platform.minimaxi.com/docs/api-reference/voice-management-get)
+    #   Chinese (Mandarin)_News_Anchor  - 新闻女声 (推荐)
+    voice_id: "Chinese (Mandarin)_Gentle_Senior"
+    
+    # 语速
+    speed: 1.1
+    
+    # 音量
+    vol: 1.0
+    
+    # 音调
+    pitch: 0
+    
+    # 音频设置
+    sample_rate: 32000
+    bitrate: 128000
+    format: "mp3"
+    channel: 1
+
+# ---------------------- 输出配置 ----------------------
+output:
+  # 输出音频格式: wav 或 mp3
+  # 注意: MiniMax 默认输出 mp3，如需 wav 可能需要后续转换
+  format: "mp3"
+  
+  # 输出目录
+  output_dir: "./tts_output"
+  
+  # 是否使用时间编号子文件夹（每次生成创建 YYYYMMDD_HHMMSS 格式的子文件夹）
+  use_timestamp_subdir: true
+  
+  # 文件名前缀
+  prefix: "dialogue_"
+  
+  # Markdown 文件输入目录
+  input_dir: "./paperwork_in"
+  
+  # 是否合并所有片段为一个完整音频文件
+  merge_audio: false
+  
+  # 片段间的静音时长（秒）
+  silence_between: 0.5
+
+# ---------------------- 速率限制配置 ----------------------
+# MiniMax API 有 RPM (Requests Per Minute) 限制
+# 免费/低 tier 账户通常为 20 RPM，即每 3 秒一个请求
+# 请根据你的账户 tier 调整此值
+rate_limit:
+  # 请求间隔延迟（秒）
+  delay: 3.0
+  
+  # 遇到 rate limit 错误时的重试次数
+  max_retries: 3
+  
+  # 每次重试的延迟增量（秒）
+  retry_delay: 5.0
+
+# ---------------------- 文本处理配置 ----------------------
+text_processing:
+  # 最大文本长度（字符数），超过会自动分段
+  max_text_length: 500
+  
+  # 是否移除文本中的括号内容，如"（打断）"
+  remove_parentheses: true
+  
+  # 是否将英文"Figure X"替换为中文"图X"
+  localize_figures: true
+
+# ---------------------- 情绪参数配置 ----------------------
+emotion:
+  # 是否使用 Markdown 文本中的情绪参数
+  # true: 读取并使用文本中标注的情绪（如 ### happy ###）
+  # false: 忽略文本中的情绪参数，让 API 自动判断情绪
+  use_emotion: false
+  
+  # 默认情绪（当 use_emotion 为 false 或文本未标注情绪时使用）
+  # 可选: gentle, happy, angry, sad, surprised, confused, confident
+  default_emotion: "gentle"
+  
+  # 当 use_emotion 为 false 时，是否传递 speed/pitch/vol 音色参数
+  # true: 传递 speed/pitch/vol，只让 API 自动判断情绪
+  # false: 完全不传递情绪相关参数，让 API 完全自动判断（默认）
+  pass_voice_params: false

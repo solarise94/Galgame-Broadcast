@@ -49,6 +49,7 @@ class DialogueLine:
     speaker: str  # 'male' 或 'female'
     text: str
     index: int
+    mood: str = "gentle"  # 情绪: gentle, happy, confident, expectant, confused, shocked, angry, sad, resigned
 
 
 class BaseTTSClient(ABC):
@@ -241,17 +242,24 @@ class MiniMaxTTSClient(BaseTTSClient):
             "Content-Type": "application/json"
         }
         
+        # 构建 voice_setting
+        voice_setting = {
+            "voice_id": voice_config.get('voice_id', 'Chinese (Mandarin)_Reliable_Executive'),
+            "speed": voice_config.get('speed', 1.0),
+            "vol": voice_config.get('vol', 1.0),
+            "pitch": voice_config.get('pitch', 0)
+        }
+        
+        # 添加 emotion 参数（如果配置中有）
+        if 'emotion' in voice_config:
+            voice_setting['emotion'] = voice_config['emotion']
+        
         # 构建请求体
         payload = {
             "model": self.model,
             "text": text,
             "stream": False,
-            "voice_setting": {
-                "voice_id": voice_config.get('voice_id', 'Chinese (Mandarin)_Reliable_Executive'),
-                "speed": voice_config.get('speed', 1.0),
-                "vol": voice_config.get('vol', 1.0),
-                "pitch": voice_config.get('pitch', 0)
-            },
+            "voice_setting": voice_setting,
             "audio_setting": {
                 "sample_rate": voice_config.get('sample_rate', 32000),
                 "bitrate": voice_config.get('bitrate', 128000),
@@ -318,16 +326,23 @@ class MiniMaxTTSClient(BaseTTSClient):
             "Content-Type": "application/json"
         }
         
+        # 构建 voice_setting
+        voice_setting = {
+            "voice_id": voice_config.get('voice_id', 'Chinese (Mandarin)_Reliable_Executive'),
+            "speed": voice_config.get('speed', 1.0),
+            "vol": voice_config.get('vol', 1.0),
+            "pitch": voice_config.get('pitch', 0)
+        }
+        
+        # 添加 emotion 参数（如果配置中有）
+        if 'emotion' in voice_config:
+            voice_setting['emotion'] = voice_config['emotion']
+        
         payload = {
             "model": self.model,
             "text": text,
             "stream": True,
-            "voice_setting": {
-                "voice_id": voice_config.get('voice_id', 'Chinese (Mandarin)_Reliable_Executive'),
-                "speed": voice_config.get('speed', 1.0),
-                "vol": voice_config.get('vol', 1.0),
-                "pitch": voice_config.get('pitch', 0)
-            },
+            "voice_setting": voice_setting,
             "audio_setting": {
                 "sample_rate": voice_config.get('sample_rate', 32000),
                 "bitrate": voice_config.get('bitrate', 128000),
@@ -371,9 +386,28 @@ class SiliconFlowTTSClient(BaseTTSClient):
     
     支持模型:
     - IndexTeam/IndexTTS-2 (IndexTTS2, B站开源)
+      * 支持情绪控制: emo_vector (Neutral, Happy, Sad, Angry, Fearful, Disgusted, Surprised)
+      * 支持情感强度: emo_alpha (0.0 ~ 1.0)
+      * 支持情感参考音频: emo_audio_prompt
     - FunAudioLLM/CosyVoice2-0.5B (阿里CosyVoice)
     - fnlp/MOSS-TTSD-v0.5 (复旦大学MOSS对话TTS)
     """
+    
+    # IndexTTS2 支持的情绪向量
+    INDEXTTS_EMOTIONS = ['Neutral', 'Happy', 'Sad', 'Angry', 'Fearful', 'Disgusted', 'Surprised']
+    
+    # 我们的情绪 -> IndexTTS2 情绪映射
+    MOOD_TO_INDEXTTS = {
+        'gentle': 'Neutral',
+        'happy': 'Happy',
+        'confident': 'Neutral',
+        'expectant': 'Happy',
+        'confused': 'Surprised',
+        'shocked': 'Surprised',
+        'angry': 'Angry',
+        'sad': 'Sad',
+        'resigned': 'Sad',
+    }
     
     def __init__(self, config: Dict):
         self.config = config
@@ -387,6 +421,9 @@ class SiliconFlowTTSClient(BaseTTSClient):
         
         # 检测是否为 MOSS-TTSD 模型
         self.is_moss_model = 'MOSS-TTSD' in self.model
+        
+        # 检测是否为 IndexTTS2 模型
+        self.is_indextts_model = 'IndexTTS' in self.model
     
     def synthesize(self, text: str, voice_config: Dict, output_path: str) -> bool:
         """
@@ -434,6 +471,24 @@ class SiliconFlowTTSClient(BaseTTSClient):
         # 动态音色/参考音频 (用于声音克隆)
         if 'references' in voice_config:
             payload['references'] = voice_config['references']
+        
+        # IndexTTS2 情绪控制参数
+        if self.is_indextts_model:
+            # emo_vector: 情绪向量 (Neutral, Happy, Sad, Angry, Fearful, Disgusted, Surprised)
+            if 'emo_vector' in voice_config:
+                payload['emo_vector'] = voice_config['emo_vector']
+            
+            # emo_alpha: 情感强度 (0.0 ~ 1.0, 默认 0.7)
+            if 'emo_alpha' in voice_config:
+                payload['emo_alpha'] = voice_config['emo_alpha']
+            
+            # emo_audio_prompt: 情感参考音频 (base64 或 URL)
+            if 'emo_audio_prompt' in voice_config:
+                payload['emo_audio_prompt'] = voice_config['emo_audio_prompt']
+            
+            # use_emo_text: 是否使用情感文本提示
+            if 'use_emo_text' in voice_config:
+                payload['use_emo_text'] = voice_config['use_emo_text']
         
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=120)
@@ -575,38 +630,79 @@ class SiliconFlowTTSClient(BaseTTSClient):
 class MarkdownParser:
     """Markdown 对话文件解析器"""
     
+    # 支持的情绪列表
+    MOODS = ['gentle', 'happy', 'confident', 'expectant', 'confused', 
+             'shocked', 'angry', 'sad', 'resigned']
+    
     def __init__(self, config: Dict):
         self.config = config
+        # 是否启用情绪功能，默认开启
+        self.enable_mood = config.get('mood', {}).get('enable', True)
+        # 是否使用 Markdown 中的情绪参数，默认开启
+        self.use_emotion = config.get('emotion', {}).get('use_emotion', True)
+        # 默认情绪
+        self.default_emotion = config.get('emotion', {}).get('default_emotion', 'gentle')
     
     def parse(self, file_path: str) -> List[DialogueLine]:
         """
         解析 Markdown 文件，提取对话内容
         
-        格式:
+        格式 (带情绪):
         ### male speaker ###
-        文本内容
+        ### happy ###
+        ### 文本内容 ###
         
-        ### female speaker ###
-        文本内容
+        格式 (无情绪，向后兼容):
+        ### male speaker ###
+        ### 文本内容 ###
         """
         dialogues = []
         
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 匹配模式: ### xxx speaker ### 换行 文本
-        pattern = r'###\s*(male|female)\s*speaker\s*###\s*\n\s*###\s*(.*?)\s*###'
-        matches = re.findall(pattern, content, re.DOTALL)
+        # 检测是否使用新格式（包含情绪标注）
+        # 新格式: ### speaker ### \n ### mood ### \n ### text ###
+        new_pattern = r'###\s*(male|female)\s*speaker\s*###\s*\n\s*###\s*(\w+)\s*###\s*\n\s*###\s*(.*?)\s*###'
+        new_matches = re.findall(new_pattern, content, re.DOTALL)
         
-        for idx, (speaker, text) in enumerate(matches, 1):
-            # 清理文本
-            text = self._clean_text(text)
-            if text:
-                dialogues.append(DialogueLine(
-                    speaker=speaker.lower(),
-                    text=text,
-                    index=idx
-                ))
+        # 旧格式: ### speaker ### \n ### text ###
+        old_pattern = r'###\s*(male|female)\s*speaker\s*###\s*\n\s*###\s*(.*?)\s*###'
+        old_matches = re.findall(old_pattern, content, re.DOTALL)
+        
+        # 如果新格式匹配成功且数量合理（约为旧格式的一半或更少，说明中间插入了mood行）
+        if new_matches and len(new_matches) >= len(old_matches) / 2:
+            # 使用新格式解析
+            for idx, (speaker, mood, text) in enumerate(new_matches, 1):
+                # 验证情绪是否有效
+                mood = mood.lower()
+                if mood not in self.MOODS:
+                    mood = self.default_emotion  # 使用默认情绪
+                
+                # 如果配置为不使用情绪参数，则使用默认情绪
+                if not self.use_emotion:
+                    mood = self.default_emotion
+                
+                text = self._clean_text(text)
+                if text:
+                    dialogues.append(DialogueLine(
+                        speaker=speaker.lower(),
+                        text=text,
+                        index=idx,
+                        mood=mood
+                    ))
+        else:
+            # 使用旧格式解析
+            default_mood = self.default_emotion if not self.use_emotion else "gentle"
+            for idx, (speaker, text) in enumerate(old_matches, 1):
+                text = self._clean_text(text)
+                if text:
+                    dialogues.append(DialogueLine(
+                        speaker=speaker.lower(),
+                        text=text,
+                        index=idx,
+                        mood=default_mood
+                    ))
         
         return dialogues
     
@@ -702,10 +798,48 @@ class AudioMerger:
 class TTSGenerator:
     """语音合成主类"""
     
+    # 情绪到 TTS 参数的映射
+    # 不同提供商支持的情绪参数不同：
+    # - MiniMax: 支持 emotion 参数 (happy, sad, angry, fearful, disgusted, surprised, neutral)
+    #            同时支持 speed, pitch(整数), vol
+    # - Qwen: 使用 instruction 文本描述
+    # - SiliconFlow: 部分模型不支持 pitch/emotion，使用 speed 调节
+    MOOD_TO_TTS = {
+        'gentle': {'speed': 1.0, 'pitch': 0, 'vol': 1.0, 'emotion': 'neutral', 'instruction': '语速适中，语气温柔平和'},
+        'happy': {'speed': 1.1, 'pitch': 2, 'vol': 1.0, 'emotion': 'happy', 'instruction': '语速稍快，语气轻快愉悦'},
+        'confident': {'speed': 1.0, 'pitch': 0, 'vol': 1.1, 'emotion': 'neutral', 'instruction': '语速适中，语气坚定自信'},
+        'expectant': {'speed': 1.1, 'pitch': 4, 'vol': 1.0, 'emotion': 'happy', 'instruction': '语速稍快，语气充满期待和好奇'},
+        'confused': {'speed': 0.9, 'pitch': 2, 'vol': 1.0, 'emotion': 'surprised', 'instruction': '语速稍慢，语气带有疑问和困惑'},
+        'shocked': {'speed': 1.2, 'pitch': 8, 'vol': 1.1, 'emotion': 'surprised', 'instruction': '语速较快，语气惊讶震惊'},
+        'angry': {'speed': 1.2, 'pitch': -4, 'vol': 1.2, 'emotion': 'angry', 'instruction': '语速较快，语气愤怒不满'},
+        'sad': {'speed': 0.8, 'pitch': -6, 'vol': 0.9, 'emotion': 'sad', 'instruction': '语速较慢，语气悲伤低沉'},
+        'resigned': {'speed': 1.0, 'pitch': -2, 'vol': 1.0, 'emotion': 'sad', 'instruction': '语速适中，语气无奈平淡'},
+    }
+    
     def __init__(self, config_path: str = "configs/config.yaml"):
         # 加载配置
         with open(config_path, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
+        
+        # 是否启用情绪功能，默认开启
+        self.enable_mood = self.config.get('mood', {}).get('enable', True)
+        # 是否使用 Markdown 中的情绪参数，默认开启
+        self.use_emotion = self.config.get('emotion', {}).get('use_emotion', True)
+        # 默认情绪
+        self.default_emotion = self.config.get('emotion', {}).get('default_emotion', 'gentle')
+        # 当 use_emotion 为 false 时，是否传递 speed/pitch/vol 参数
+        self.pass_voice_params = self.config.get('emotion', {}).get('pass_voice_params', False)
+        
+        if self.enable_mood:
+            if self.use_emotion:
+                print("✨ 情绪功能已启用（使用文本标注的情绪）")
+            else:
+                if self.pass_voice_params:
+                    print("✨ 情绪功能已启用（API 自动判断情绪，保留音色参数）")
+                else:
+                    print("✨ 情绪功能已启用（API 完全自动判断）")
+        else:
+            print("ℹ️ 情绪功能已禁用")
         
         # 初始化 TTS 客户端
         provider = self.config.get('provider', 'qwen').lower()
@@ -727,8 +861,19 @@ class TTSGenerator:
         self.merger = AudioMerger()
         
         # 创建输出目录
-        self.output_dir = Path(self.config['output']['output_dir'])
+        base_output_dir = Path(self.config['output']['output_dir'])
+        
+        # 检查是否使用时间编号子文件夹
+        use_timestamp_subdir = self.config['output'].get('use_timestamp_subdir', False)
+        if use_timestamp_subdir:
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.output_dir = base_output_dir / timestamp
+        else:
+            self.output_dir = base_output_dir
+        
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        print(f"📁 输出目录: {self.output_dir.absolute()}")
     
     def generate(self, markdown_path: str):
         """
@@ -815,7 +960,81 @@ class TTSGenerator:
             print(f"[{dialogue.index}/{len(dialogues)}] {dialogue.speaker}: {dialogue.text[:40]}...")
             
             # 获取音色配置
-            voice_config = self.config['voices'][dialogue.speaker]
+            voice_config = self.config['voices'][dialogue.speaker].copy()
+            
+            # 如果启用情绪功能，应用情绪参数
+            if self.enable_mood and dialogue.mood in self.MOOD_TO_TTS:
+                mood_params = self.MOOD_TO_TTS[dialogue.mood]
+                # 根据提供商应用不同的参数
+                provider = self.config.get('provider', 'qwen').lower()
+                
+                if provider == 'minimax':
+                    # MiniMax 支持 emotion 参数 (happy, sad, angry, fearful, disgusted, surprised, neutral)
+                    # 同时支持 speed, pitch(整数), vol
+                    if self.use_emotion:
+                        # 使用文本标注的情绪参数
+                        voice_config['speed'] = mood_params['speed']
+                        voice_config['pitch'] = int(mood_params['pitch'])
+                        voice_config['vol'] = mood_params['vol']
+                        voice_config['emotion'] = mood_params['emotion']
+                        print(f"  [MiniMax 情绪: {mood_params['emotion']}]")
+                    else:
+                        # 不传递情绪参数，让 MiniMax 自动判断
+                        if self.pass_voice_params:
+                            # 只传递 speed/pitch/vol，让 API 自动判断情绪
+                            voice_config['speed'] = mood_params['speed']
+                            voice_config['pitch'] = int(mood_params['pitch'])
+                            voice_config['vol'] = mood_params['vol']
+                            print("  [MiniMax 自动判断情绪，使用配置音色参数]")
+                        else:
+                            # 完全不传递情绪相关参数，让 API 完全自动判断
+                            print("  [MiniMax 完全自动判断情绪和音色]")
+                elif provider == 'siliconflow':
+                    # SiliconFlow 不同模型支持不同的情绪参数
+                    model = self.config.get('api', {}).get('model', '')
+                    
+                    if self.use_emotion:
+                        # IndexTTS2 支持 emo_vector 等情绪参数
+                        if 'IndexTTS' in model:
+                            # IndexTTS2 情绪映射
+                            indextts_emotion = SiliconFlowTTSClient.MOOD_TO_INDEXTTS.get(dialogue.mood, 'Neutral')
+                            voice_config['emo_vector'] = indextts_emotion
+                            # 情感强度 (0.0 ~ 1.0)
+                            voice_config['emo_alpha'] = 0.7
+                            # 语速
+                            voice_config['speed'] = mood_params['speed']
+                            print(f"  [IndexTTS2 情绪: {indextts_emotion}]")
+                        else:
+                            # 其他模型仅使用 speed
+                            voice_config['speed'] = mood_params['speed']
+                    else:
+                        if self.pass_voice_params:
+                            # 只传递 speed，让 API 自动判断情绪
+                            voice_config['speed'] = mood_params['speed']
+                            print("  [SiliconFlow 自动判断情绪，使用配置语速]")
+                        else:
+                            print("  [SiliconFlow 完全自动判断情绪和音色]")
+                elif provider == 'qwen':
+                    # Qwen 使用 instructions 控制风格
+                    if self.use_emotion:
+                        if 'instructions' in voice_config:
+                            # 在原有指令基础上添加情绪描述
+                            base_instruction = voice_config['instructions']
+                            voice_config['instructions'] = f"{base_instruction}，{mood_params['instruction']}"
+                        else:
+                            voice_config['instructions'] = mood_params['instruction']
+                        # 标记需要优化指令
+                        voice_config['optimize_instructions'] = True
+                        print(f"  [Qwen 情绪: {dialogue.mood}]")
+                    else:
+                        if self.pass_voice_params and 'instructions' in voice_config:
+                            # 保留原有指令，不添加情绪描述
+                            print("  [Qwen 自动判断情绪，使用配置音色]")
+                        else:
+                            # 清除指令，让 API 完全自动判断
+                            if 'instructions' in voice_config:
+                                del voice_config['instructions']
+                            print("  [Qwen 完全自动判断情绪和音色]")
             
             # 分段处理长文本
             max_length = self.config['text_processing'].get('max_text_length', 500)

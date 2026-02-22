@@ -1,0 +1,107 @@
+# ============================================================
+# TTS 语音合成配置 - 阿里云百炼 Qwen-TTS
+# ============================================================
+# 本配置文件仅包含阿里云 Qwen-TTS 所需的配置项
+# 如需使用其他提供商，请使用对应的配置文件:
+#   - config_siliconflow.yaml  (硅基流动 SiliconFlow)
+# ============================================================
+
+# 提供商标识 (固定为 qwen，无需修改)
+provider: "qwen"
+
+# ---------------------- API 配置 ----------------------
+api:
+  # 阿里云百炼 API Key
+  # 获取地址: https://help.aliyun.com/zh/model-studio/get-api-key
+  api_key: "YOUR_API_KEY_HERE"
+  
+  # API 接口地址
+  # 北京地域: https://dashscope.aliyuncs.com/api/v1
+  # 新加坡地域: https://dashscope-intl.aliyuncs.com/api/v1
+  base_url: "https://dashscope.aliyuncs.com/api/v1"
+  
+  # TTS 模型选择
+  # 
+  # 【经济型】qwen3-tts-flash (推荐)
+  #   - 价格: ~0.5-1元/万字符
+  #   - 速度: 快
+  #   - 音色: 49种标准音色
+  #   - 适用: 日常内容、批量生产
+  #
+  # 【专业型】qwen3-tts-instruct-flash
+  #   - 价格: ~1-2元/万字符
+  #   - 功能: 支持自然语言指令控制（语速、语调、情感）
+  #   - 适用: 需要精细控制声音风格的场景
+  #
+  model: "qwen3-tts-flash"
+
+# ---------------------- 音色配置 ----------------------
+voices:
+  # 男声配置
+  male:
+    # 可选音色:
+    #   Ethan    - 成熟稳重 (推荐，适合学术讲解)
+    #   Eric     - 青年男声 (适合轻松内容)
+    #   Peter    - 专业男声 (适合新闻播报)
+    #   Ryan     - 温暖男声 (适合故事讲述)
+    voice: "Ethan"
+    
+    # 语言类型: Chinese / English
+    language_type: "Chinese"
+    
+    # 【可选】指令控制（仅 qwen3-tts-instruct-flash 模型生效）
+    # 用自然语言描述说话风格，例如:
+    #   - "语速适中，语气专业，适合学术讲解"
+    #   - "语速较快，语气活泼，适合产品介绍"
+    #   - "语速缓慢，声音低沉，充满神秘感"
+    # instructions: "语速适中，语气专业，适合学术讲解"
+    # optimize_instructions: true
+  
+  # 女声配置
+  female:
+    # 可选音色:
+    #   Cherry   - 活泼女声 (适合对话、轻松内容)
+    #   Serena   - 温柔女声 (适合故事、情感内容)
+    #   Bella    - 知性女声 (适合学术、专业内容)
+    voice: "Cherry"
+    
+    # 语言类型
+    language_type: "Chinese"
+    
+    # 【可选】指令控制
+    # instructions: "语速适中，语气亲切自然，适合科普讲解"
+    # optimize_instructions: true
+
+# ---------------------- 输出配置 ----------------------
+output:
+  # 输出音频格式: wav 或 mp3
+  format: "wav"
+  
+  # 输出目录
+  output_dir: "./audio_output"
+  
+  # 是否使用时间编号子文件夹（每次生成创建 YYYYMMDD_HHMMSS 格式的子文件夹）
+  use_timestamp_subdir: true
+  
+  # 文件名前缀
+  prefix: "dialogue"
+  
+  # Markdown 文件输入目录
+  input_dir: "./paperwork_in"
+  
+  # 是否合并所有片段为一个完整音频文件
+  merge_audio: false
+  
+  # 片段间的静音时长（秒）
+  silence_between: 0.5
+
+# ---------------------- 文本处理配置 ----------------------
+text_processing:
+  # 最大文本长度（字符数），超过会自动分段
+  max_text_length: 500
+  
+  # 是否移除文本中的括号内容，如"（打断）"
+  remove_parentheses: true
+  
+  # 是否将英文"Figure X"替换为中文"图X"
+  localize_figures: true

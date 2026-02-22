@@ -1,0 +1,102 @@
+# ============================================================
+# IndexTTS2 语音克隆配置文件
+# ============================================================
+# 本配置文件用于 tts_index_clone.py 语音克隆脚本
+# 支持 IndexTeam/IndexTTS-2 模型（硅基流动 API）
+# 
+# 使用方法:
+#   python tts_index_clone.py 文案.md --ref-audio voice.mp3 --ref-text "参考文本"
+#   或
+#   python tts_index_clone.py 文案.md -c configs/tts/config_index_clone.yaml
+# ============================================================
+
+# ---------------------- API 配置 ----------------------
+api:
+  # 硅基流动 API Key
+  # 获取地址: https://cloud.siliconflow.cn/account/ak
+  api_key: "YOUR_API_KEY_HERE"
+  
+  # API 接口地址
+  base_url: "https://api.siliconflow.cn/v1"
+  
+  # 模型选择
+  # IndexTeam/IndexTTS-2 - B站开源零样本语音克隆模型（推荐）
+  model: "IndexTeam/IndexTTS-2"
+
+# ---------------------- 音色克隆配置 ----------------------
+# 参考音频配置（用于单一声色克隆）
+# 可以通过命令行参数 --ref-audio 和 --ref-text 覆盖
+reference:
+  # 参考音频路径（本地文件路径或 URL）
+  # 示例: "./reference_voice.mp3" 或 "https://example.com/voice.wav"
+  audio: ""
+  
+  # 参考音频对应的文字内容（8-10秒音频效果最佳）
+  text: ""
+
+# 分别配置男女声（可选）
+# 如果配置了，男女对话会使用不同的音色
+voices:
+  male:
+    # 男声参考音频
+    audio: ""
+    # 男声参考文本
+    text: ""
+    # 输出采样率
+    sample_rate: 44100
+    # 语速 (0.5 - 2.0)
+    speed: 1.0
+    # 音量增益 (-10 - 10 dB)
+    gain: 0.0
+    
+  female:
+    # 女声参考音频
+    audio: ""
+    # 女声参考文本
+    text: ""
+    # 输出采样率
+    sample_rate: 44100
+    # 语速 (0.5 - 2.0)
+    speed: 1.0
+    # 音量增益 (-10 - 10 dB)
+    gain: 0.0
+
+# ---------------------- 输出配置 ----------------------
+output:
+  # 输出音频格式: wav 或 mp3
+  format: "wav"
+  
+  # 输出目录
+  output_dir: "./audio_output"
+  
+  # 文件名前缀
+  prefix: "cloned"
+  
+  # 是否使用时间戳子文件夹
+  use_timestamp_subdir: true
+
+# ---------------------- 情绪功能配置 ----------------------
+# 情绪功能用于根据脚本中的情绪标签调整参数
+# 脚本格式: ### male speaker ### \n ### happy ### \n ### 文本内容 ###
+mood:
+  # 是否启用情绪功能，默认开启
+  # 关闭后所有对话使用默认情绪(Neutral)
+  enable: true
+  
+  # IndexTTS2 情绪映射说明:
+  # 
+  # 我们的情绪    -> IndexTTS2 emo_vector
+  # gentle        -> Neutral    (中性/温柔)
+  # happy         -> Happy      (开心)
+  # confident     -> Neutral    (自信 - 中性+语速稳定)
+  # expectant     -> Happy      (期待 - 开心+音调上扬)
+  # confused      -> Surprised  (困惑 - 惊讶+语速放慢)
+  # shocked       -> Surprised  (震惊 - 惊讶+高音)
+  # angry         -> Angry      (愤怒)
+  # sad           -> Sad        (悲伤)
+  # resigned      -> Sad        (无奈 - 悲伤+低音)
+  # 
+  # IndexTTS2 还支持以下参数（当前自动设置）:
+  # emo_alpha: 0.7          # 情感强度 (0.0 ~ 1.0)
+  # emo_audio_prompt: ...   # 情感参考音频（可选）
+  # speed: 根据情绪自动调整 # 语速 (0.5 ~ 2.0)

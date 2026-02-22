@@ -72,16 +72,26 @@ class DialogueSegment:
     text: str
     audio_path: str
     duration: float
+    mood: str = "gentle"  # 情绪: gentle, happy, confident, expectant, confused, shocked, angry, sad, resigned
 
 
 class SubtitleGenerator:
     """字幕生成器"""
     
-    def __init__(self, font_path: str = None, font_size: int = 40, style: str = "default"):
+    # 支持的情绪列表
+    MOODS = ['gentle', 'happy', 'confident', 'expectant', 'confused', 
+             'shocked', 'angry', 'sad', 'resigned']
+    
+    def __init__(self, font_path: str = None, font_size: int = 40, style: str = "default", 
+                 enable_mood: bool = True, avatar_base_path: str = "avatar",
+                 galgame_avatar_config: Dict = None):
         self.font_size = font_size
         self.font_path = font_path or self._get_default_font()
         self.style = style  # "default" 或 "galgame"
         self.avatar_size = 100  # 头像尺寸
+        self.enable_mood = enable_mood  # 是否启用情绪立绘
+        self.avatar_base_path = avatar_base_path  # 立绘基础路径
+        self.galgame_avatar_config = galgame_avatar_config or {}  # GalGame 立绘配置
         self.avatars = self._load_avatars()
         self.min_lines = 2  # 最少显示2行（保证字幕框有一定高度）
         self.max_lines = 6  # 最多显示6行（防止过长）
@@ -204,31 +214,65 @@ class SubtitleGenerator:
         return 0  # 找不到好的拆分点
         
     def _load_avatars(self) -> Dict[str, Image.Image]:
-        """加载头像图片"""
+        """加载头像图片（支持情绪立绘）"""
         avatars = {}
-        avatar_paths = {
-            'male': 'male.png',
-            'female': 'female.png'
+        
+        if self.enable_mood:
+            # 启用情绪功能：加载所有情绪立绘
+            for speaker in ['male', 'female']:
+                for mood in self.MOODS:
+                    key = f"{speaker}_{mood}"
+                    path = f"{self.avatar_base_path}/{speaker}-{mood}.png"
+                    if os.path.exists(path):
+                        try:
+                            img = Image.open(path).convert('RGBA')
+                            # 调整大小为圆形头像
+                            img = img.resize((self.avatar_size, self.avatar_size), Image.Resampling.LANCZOS)
+                            # 创建圆形遮罩
+                            mask = Image.new('L', (self.avatar_size, self.avatar_size), 0)
+                            mask_draw = ImageDraw.Draw(mask)
+                            mask_draw.ellipse((0, 0, self.avatar_size, self.avatar_size), fill=255)
+                            # 应用圆形遮罩
+                            img.putalpha(mask)
+                            avatars[key] = img
+                        except Exception as e:
+                            print(f"⚠ 加载头像失败 {path}: {e}")
+            
+            if avatars:
+                print(f"✓ 已加载 {len(avatars)} 个情绪立绘")
+        
+        # 同时加载默认立绘作为后备
+        default_paths = {
+            'male': f'{self.avatar_base_path}/male.png',
+            'female': f'{self.avatar_base_path}/female.png'
         }
         
-        for speaker, path in avatar_paths.items():
+        for speaker, path in default_paths.items():
             if os.path.exists(path):
                 try:
                     img = Image.open(path).convert('RGBA')
-                    # 调整大小为圆形头像
                     img = img.resize((self.avatar_size, self.avatar_size), Image.Resampling.LANCZOS)
-                    # 创建圆形遮罩
                     mask = Image.new('L', (self.avatar_size, self.avatar_size), 0)
                     mask_draw = ImageDraw.Draw(mask)
                     mask_draw.ellipse((0, 0, self.avatar_size, self.avatar_size), fill=255)
-                    # 应用圆形遮罩
                     img.putalpha(mask)
                     avatars[speaker] = img
-                    print(f"✓ 加载头像: {path}")
+                    print(f"✓ 加载默认头像: {path}")
                 except Exception as e:
-                    print(f"⚠ 加载头像失败 {path}: {e}")
+                    print(f"⚠ 加载默认头像失败 {path}: {e}")
         
         return avatars
+    
+    def get_avatar(self, speaker: str, mood: str = "gentle") -> Optional[Image.Image]:
+        """获取指定说话人和情绪的头像"""
+        if self.enable_mood:
+            # 优先返回情绪立绘
+            key = f"{speaker}_{mood}"
+            if key in self.avatars:
+                return self.avatars[key]
+        
+        # 返回默认立绘
+        return self.avatars.get(speaker)
     
     def _get_default_font(self) -> str:
         """获取系统默认中文字体"""
@@ -246,7 +290,7 @@ class SubtitleGenerator:
         return None
     
     def create_subtitle_image(self, text: str, size: Tuple[int, int], 
-                             speaker: str = None) -> np.ndarray:
+                             speaker: str = None, mood: str = "gentle") -> np.ndarray:
         """
         创建字幕图片
         
@@ -254,14 +298,15 @@ class SubtitleGenerator:
             text: 字幕文本
             size: (width, height)
             speaker: 说话人标签
+            mood: 情绪标签
         """
         if self.style == "galgame":
-            return self._create_galgame_subtitle(text, size, speaker)
+            return self._create_galgame_subtitle(text, size, speaker, mood=mood)
         else:
-            return self._create_default_subtitle(text, size, speaker)
+            return self._create_default_subtitle(text, size, speaker, mood=mood)
     
     def _create_default_subtitle(self, text: str, size: Tuple[int, int], 
-                                  speaker: str = None) -> np.ndarray:
+                                  speaker: str = None, **kwargs) -> np.ndarray:
         """默认样式：头像在左上方，深色字幕框"""
         width, height = size
         
@@ -303,8 +348,10 @@ class SubtitleGenerator:
             avatar_x = bg_left + 15
             avatar_y = bg_top + 15
             
-            if speaker in self.avatars:
-                img.paste(self.avatars[speaker], (avatar_x, avatar_y), self.avatars[speaker])
+            # 获取头像（支持情绪立绘）
+            avatar = self.get_avatar(speaker, kwargs.get('mood', 'gentle'))
+            if avatar:
+                img.paste(avatar, (avatar_x, avatar_y), avatar)
                 
                 try:
                     name_font = ImageFont.truetype(self.font_path, 24) if self.font_path else ImageFont.load_default()
@@ -331,14 +378,15 @@ class SubtitleGenerator:
         return np.array(img)
     
     def _create_galgame_subtitle(self, text: str, size: Tuple[int, int], 
-                                  speaker: str = None) -> np.ndarray:
+                                  speaker: str = None, **kwargs) -> np.ndarray:
         """
         GalGame 风格字幕：
-        - 半透明白色对话框
+        - 半透明白色对话框（底部居中，全宽）
         - 圆角设计
-        - 名字标签在对话框上方
-        - 头像在对话框右侧（立绘风格）
+        - 名字标签在对话框上方左侧
         - 渐变边框
+        
+        注意：立绘不在这里绘制，而是作为独立的视频层
         """
         width, height = size
         
@@ -347,11 +395,9 @@ class SubtitleGenerator:
         
         # ========== 布局参数 ==========
         dialog_margin = 60
-        avatar_width = 200  # GalGame 立绘更大
-        avatar_margin = 20
         
-        # 对话框区域（底部居中，左侧留给头像）
-        dialog_left = dialog_margin + avatar_width + avatar_margin
+        # 对话框区域（底部居中，全宽）
+        dialog_left = dialog_margin
         dialog_right = width - dialog_margin
         dialog_bottom = height - 40
         dialog_width = dialog_right - dialog_left
@@ -374,7 +420,7 @@ class SubtitleGenerator:
         dialog_height = text_padding_top + text_height + text_padding_bottom
         dialog_top = dialog_bottom - dialog_height
         
-        # ========== 绘制名字标签（在对话框上方） ==========
+        # ========== 绘制名字标签（在对话框上方左侧） ==========
         if speaker:
             speaker_name = "Alex" if speaker == "male" else "Cherry"
             name_bg_color = (100, 150, 220, 230) if speaker == "male" else (220, 120, 160, 230)
@@ -444,16 +490,127 @@ class SubtitleGenerator:
             draw.text((text_start_x, y), line, font=font, fill=(50, 50, 60))
             y += self.line_height
         
-        # ========== 绘制左侧头像（立绘风格） ==========
-        if speaker and speaker in self.avatars:
-            # 加载更大的头像
-            avatar_large = self._get_large_avatar(speaker, avatar_width)
-            if avatar_large:
-                avatar_x = dialog_margin  # 左侧对齐
-                avatar_y = dialog_bottom - avatar_large.height + 20  # 底部对齐，稍微露出
-                img.paste(avatar_large, (avatar_x, avatar_y), avatar_large)
+        # 注意：立绘不再这里绘制，而是作为独立层在视频合成时添加
+        # 这样可以确保立绘在字幕框后面
         
         return np.array(img)
+    
+    def _calc_galgame_dialog_top(self, text: str, size: Tuple[int, int]) -> int:
+        """
+        计算 GalGame 风格字幕框的顶部 Y 坐标
+        
+        Args:
+            text: 字幕文本
+            size: 视频尺寸 (width, height)
+        
+        Returns:
+            dialog_top: 字幕框顶部 Y 坐标
+        """
+        width, height = size
+        
+        # ========== 布局参数（与 _create_galgame_subtitle 保持一致）==========
+        dialog_margin = 60
+        dialog_left = dialog_margin
+        dialog_right = width - dialog_margin
+        dialog_bottom = height - 40
+        dialog_width = dialog_right - dialog_left
+        
+        text_padding_left = 50
+        text_padding_top = 40
+        text_padding_bottom = 30
+        max_text_width = dialog_width - text_padding_left * 2
+        
+        # ========== 计算文本行数 ==========
+        font, lines = self._get_adaptive_font_and_lines(
+            text, max_text_width, float('inf'), self.max_lines
+        )
+        
+        actual_lines = max(len(lines), self.min_lines)
+        text_height = actual_lines * self.line_height
+        
+        # 对话框高度
+        dialog_height = text_padding_top + text_height + text_padding_bottom
+        dialog_top = dialog_bottom - dialog_height
+        
+        return dialog_top
+    
+    def get_galgame_avatar_clip(self, size: Tuple[int, int], speaker: str, 
+                                mood: str = "gentle", duration: float = 1.0, 
+                                fps: int = 30, dialog_top: int = None):
+        """
+        获取 GalGame 风格的立绘视频层（用于放在字幕后面）
+        
+        Args:
+            size: 视频尺寸 (width, height)
+            speaker: 说话人
+            mood: 情绪
+            duration: 持续时间
+            fps: 帧率
+            dialog_top: 字幕框顶部 Y 坐标（用于定位立绘位置）
+        
+        Returns:
+            ImageClip 或 None
+        """
+        width, height = size
+        
+        if not speaker:
+            return None
+        
+        # 读取配置参数
+        config = self.galgame_avatar_config
+        height_ratio = config.get('height_ratio', 0.45)  # 默认占屏幕高度 45%
+        horizontal_position = config.get('horizontal_position', 0.7)  # 默认在右侧 70% 位置
+        vertical_offset = config.get('vertical_offset', -20)  # 默认向上偏移 20px
+        
+        # 计算立绘尺寸
+        avatar_max_height = int(height * height_ratio)
+        
+        # 加载立绘
+        avatar_img = self._get_large_avatar_by_height(speaker, avatar_max_height, mood)
+        
+        if not avatar_img:
+            print(f"⚠️ 无法加载立绘: {speaker}-{mood}")
+            return None
+        
+        # 等比缩放确保不超过最大高度
+        if avatar_img.height > avatar_max_height:
+            ratio = avatar_max_height / avatar_img.height
+            new_width = int(avatar_img.width * ratio)
+            avatar_img = avatar_img.resize((new_width, avatar_max_height), Image.Resampling.LANCZOS)
+        
+        # 创建透明背景的图片（全屏尺寸）
+        full_img = Image.new('RGBA', size, (0, 0, 0, 0))
+        
+        # 计算立绘水平位置：根据 horizontal_position 参数
+        # horizontal_position 0.0 = 最左, 0.5 = 居中, 1.0 = 最右
+        # 立绘中心点位于 horizontal_position 对应的位置
+        avatar_center_x = int(width * horizontal_position)
+        avatar_x = avatar_center_x - avatar_img.width // 2
+        
+        # 计算立绘垂直位置：贴着字幕框上方
+        if dialog_top is not None:
+            # 贴着字幕框上方，加上垂直偏移
+            avatar_y = dialog_top - avatar_img.height + vertical_offset
+        else:
+            # 回退：使用默认位置（屏幕底部偏上）
+            avatar_y = height - avatar_img.height - 100
+        
+        # 确保立绘不会完全超出屏幕
+        if avatar_x < -avatar_img.width // 2:
+            avatar_x = -avatar_img.width // 2
+        if avatar_x > width - avatar_img.width // 2:
+            avatar_x = width - avatar_img.width // 2
+        
+        # 将立绘粘贴到透明背景上
+        full_img.paste(avatar_img, (avatar_x, avatar_y), avatar_img)
+        
+        # 转换为 numpy 数组并创建 ImageClip
+        import numpy as np
+        from moviepy import ImageClip as MCImageClip
+        
+        avatar_clip = MCImageClip(np.array(full_img)).with_duration(duration).with_fps(fps)
+        
+        return avatar_clip
     
     def _draw_rounded_rect(self, draw, bbox, radius, fill=None, outline=None, width=1):
         """绘制圆角矩形"""
@@ -480,26 +637,89 @@ class SubtitleGenerator:
             draw.line([x1, y1 + radius, x1, y2 - radius], fill=outline, width=width)
             draw.line([x2, y1 + radius, x2, y2 - radius], fill=outline, width=width)
     
-    def _get_large_avatar(self, speaker: str, target_width: int) -> Image.Image:
-        """获取大尺寸头像（立绘风格）"""
-        if speaker not in self.avatars:
-            return None
+    def _get_large_avatar(self, speaker: str, target_width: int, mood: str = "gentle") -> Image.Image:
+        """获取大尺寸头像（立绘风格，支持情绪）"""
+        # 确定要加载的文件路径
+        if self.enable_mood:
+            # 优先尝试情绪立绘
+            mood_path = f"{self.avatar_base_path}/{speaker}-{mood}.png"
+            if os.path.exists(mood_path):
+                try:
+                    img = Image.open(mood_path).convert('RGBA')
+                    ratio = target_width / img.width
+                    new_height = int(img.height * ratio)
+                    img = img.resize((target_width, new_height), Image.Resampling.LANCZOS)
+                    return img
+                except:
+                    pass
         
-        # 从原始文件重新加载大尺寸版本
-        avatar_paths = {'male': 'male.png', 'female': 'female.png'}
-        if speaker not in avatar_paths:
-            return self.avatars[speaker]
+        # 使用默认立绘
+        default_path = f"{self.avatar_base_path}/{speaker}.png"
+        if os.path.exists(default_path):
+            try:
+                img = Image.open(default_path).convert('RGBA')
+                ratio = target_width / img.width
+                new_height = int(img.height * ratio)
+                img = img.resize((target_width, new_height), Image.Resampling.LANCZOS)
+                return img
+            except:
+                pass
         
-        try:
-            img = Image.open(avatar_paths[speaker]).convert('RGBA')
-            # 保持宽高比，宽度为 target_width
-            ratio = target_width / img.width
-            new_height = int(img.height * ratio)
-            img = img.resize((target_width, new_height), Image.Resampling.LANCZOS)
-            return img
-        except:
-            # 失败则返回原始头像
-            return self.avatars[speaker]
+        # 失败则返回已加载的头像
+        return self.get_avatar(speaker, mood)
+    
+    def _get_large_avatar_by_height(self, speaker: str, target_height: int, mood: str = "gentle") -> Image.Image:
+        """获取大尺寸头像（按目标高度缩放，立绘风格，支持情绪）"""
+        # 情绪名称映射（代码中的情绪 -> 文件名中的情绪）
+        mood_mapping = {
+            'gentle': 'neutral',
+            'shocked': 'surprised',
+            'resigned': 'sad',
+            'expectant': 'expectant',
+            'confused': 'confused',
+            'angry': 'angry',
+            'happy': 'happy',
+            'confident': 'confident',
+            'sad': 'sad'
+        }
+        
+        # 确定要加载的文件路径
+        if self.enable_mood:
+            # 优先尝试情绪立绘（使用映射后的名称）
+            mapped_mood = mood_mapping.get(mood, mood)
+            mood_path = f"{self.avatar_base_path}/{speaker}-{mapped_mood}.png"
+            if os.path.exists(mood_path):
+                try:
+                    img = Image.open(mood_path).convert('RGBA')
+                    ratio = target_height / img.height
+                    new_width = int(img.width * ratio)
+                    img = img.resize((new_width, target_height), Image.Resampling.LANCZOS)
+                    return img
+                except Exception as e:
+                    print(f"⚠️ 加载立绘失败 {mood_path}: {e}")
+        
+        # 回退到 neutral 立绘
+        neutral_path = f"{self.avatar_base_path}/{speaker}-neutral.png"
+        if os.path.exists(neutral_path):
+            try:
+                img = Image.open(neutral_path).convert('RGBA')
+                ratio = target_height / img.height
+                new_width = int(img.width * ratio)
+                img = img.resize((new_width, target_height), Image.Resampling.LANCZOS)
+                return img
+            except Exception as e:
+                print(f"⚠️ 加载默认立绘失败 {neutral_path}: {e}")
+        
+        # 失败则尝试使用 _get_large_avatar 并按比例调整
+        fallback = self.get_avatar(speaker, mood)
+        if fallback:
+            try:
+                ratio = target_height / fallback.height
+                new_width = int(fallback.width * ratio)
+                return fallback.resize((new_width, target_height), Image.Resampling.LANCZOS)
+            except:
+                pass
+        return fallback
     
     def _get_adaptive_font_and_lines(self, text: str, max_width: int, 
                                       max_height: int, max_lines: int) -> Tuple[ImageFont.FreeTypeFont, List[str]]:
@@ -661,10 +881,16 @@ class PodcastVideoGenerator:
         self.width = self.config.get('width', 1920)
         self.height = self.config.get('height', 1080)
         self.fps = self.config.get('fps', 30)
+        self.enable_mood = self.config.get('enable_mood', True)
+        if self.enable_mood:
+            print("✨ 情绪立绘功能已启用")
         self.subtitle_gen = SubtitleGenerator(
             font_path=self.config.get('font_path'),
             font_size=self.config.get('font_size', 40),
-            style=self.config.get('subtitle_style', 'default')
+            style=self.config.get('subtitle_style', 'default'),
+            enable_mood=self.enable_mood,
+            avatar_base_path=self.config.get('avatar_base_path', 'avatar'),
+            galgame_avatar_config=self.config.get('galgame_avatar', {})
         )
         
     def create_podcast_video(self, 
@@ -717,17 +943,25 @@ class PodcastVideoGenerator:
             # 检查字幕长度，自动拆分长字幕（返回 [(文本, 时间比例), ...]）
             subtitle_parts_with_ratio = self.subtitle_gen.split_long_text(seg.text, self.width)
             
+            # 获取情绪标签
+            mood = getattr(seg, 'mood', 'gentle') if self.enable_mood else 'gentle'
+            
+            # 判断是否使用 galgame 风格（需要单独添加立绘层）
+            is_galgame_style = self.config.get('subtitle_style', 'default') == 'galgame'
+            
             if len(subtitle_parts_with_ratio) > 1:
                 # 长字幕拆分成多个子片段，根据内容权重分配时间
                 subtitle_clips = []
+                avatar_clips = []  # 每个子片段的立绘层
                 current_start = 0.0
                 
                 for part_text, time_ratio in subtitle_parts_with_ratio:
                     # 根据权重计算该段字幕的显示时长
                     part_duration = duration * time_ratio
                     
+                    # 创建字幕 clip
                     subtitle_img = self.subtitle_gen.create_subtitle_image(
-                        part_text, (self.width, self.height), seg.speaker
+                        part_text, (self.width, self.height), seg.speaker, mood
                     )
                     subtitle_clip = (ImageClip(subtitle_img)
                                    .with_start(current_start)
@@ -735,22 +969,49 @@ class PodcastVideoGenerator:
                                    .with_fps(self.fps))
                     subtitle_clips.append(subtitle_clip)
                     
+                    # 对于 galgame 风格，为每个子片段单独创建立绘层
+                    if is_galgame_style and seg.speaker:
+                        dialog_top = self.subtitle_gen._calc_galgame_dialog_top(part_text, (self.width, self.height))
+                        avatar_clip = self.subtitle_gen.get_galgame_avatar_clip(
+                            (self.width, self.height), seg.speaker, mood, 
+                            part_duration, self.fps, dialog_top
+                        )
+                        if avatar_clip:
+                            avatar_clip = avatar_clip.with_start(current_start)
+                            avatar_clips.append(avatar_clip)
+                    
                     current_start += part_duration
                 
-                # 合成视频片段（背景 + 多个字幕）
-                composite = CompositeVideoClip([video_clip] + subtitle_clips)
+                # 合成视频片段（背景 + 立绘 + 字幕）
+                # 层级：背景在最底层，然后是立绘，字幕在最上层
+                all_clips = [video_clip]
+                all_clips.extend(avatar_clips)
+                all_clips.extend(subtitle_clips)
+                composite = CompositeVideoClip(all_clips)
             else:
                 # 普通字幕（只有一段）
                 part_text, _ = subtitle_parts_with_ratio[0]
                 subtitle_img = self.subtitle_gen.create_subtitle_image(
-                    part_text, (self.width, self.height), seg.speaker
+                    part_text, (self.width, self.height), seg.speaker, mood
                 )
                 subtitle_clip = (ImageClip(subtitle_img)
                                .with_duration(duration)
                                .with_fps(self.fps))
                 
-                # 合成视频片段
-                composite = CompositeVideoClip([video_clip, subtitle_clip])
+                # 对于 galgame 风格，创建立绘层
+                if is_galgame_style and seg.speaker:
+                    dialog_top = self.subtitle_gen._calc_galgame_dialog_top(part_text, (self.width, self.height))
+                    avatar_clip = self.subtitle_gen.get_galgame_avatar_clip(
+                        (self.width, self.height), seg.speaker, mood, 
+                        duration, self.fps, dialog_top
+                    )
+                    # 合成视频片段（背景 + 立绘 + 字幕）
+                    if avatar_clip:
+                        composite = CompositeVideoClip([video_clip, avatar_clip, subtitle_clip])
+                    else:
+                        composite = CompositeVideoClip([video_clip, subtitle_clip])
+                else:
+                    composite = CompositeVideoClip([video_clip, subtitle_clip])
             
             composite = composite.with_audio(audio_clip)
             
@@ -1115,22 +1376,43 @@ class AudioVideoPipeline:
         return output
     
     def _parse_markdown(self, markdown_path: str) -> List[Dict]:
-        """解析 Markdown 文件"""
+        """解析 Markdown 文件（支持情绪标注）"""
         with open(markdown_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        pattern = r'###\s*(male|female)\s*speaker\s*###\s*\n\s*###\s*(.*?)\s*###'
-        matches = re.findall(pattern, content, re.DOTALL)
-        
         dialogues = []
-        for idx, (speaker, text) in enumerate(matches, 1):
-            text = self._clean_text(text)
-            if text:
-                dialogues.append({
-                    'index': idx,
-                    'speaker': speaker.lower(),
-                    'text': text
-                })
+        
+        # 首先尝试解析新格式（带情绪）
+        # 新格式: ### speaker ### \n ### mood ### \n ### text ###
+        new_pattern = r'###\s*(male|female)\s*speaker\s*###\s*\n\s*###\s*(\w+)\s*###\s*\n\s*###\s*(.*?)\s*###'
+        new_matches = re.findall(new_pattern, content, re.DOTALL)
+        
+        # 旧格式: ### speaker ### \n ### text ###
+        old_pattern = r'###\s*(male|female)\s*speaker\s*###\s*\n\s*###\s*(.*?)\s*###'
+        old_matches = re.findall(old_pattern, content, re.DOTALL)
+        
+        # 如果新格式匹配成功且数量合理，使用新格式
+        if new_matches and len(new_matches) >= len(old_matches) / 2:
+            for idx, (speaker, mood, text) in enumerate(new_matches, 1):
+                text = self._clean_text(text)
+                if text:
+                    dialogues.append({
+                        'index': idx,
+                        'speaker': speaker.lower(),
+                        'text': text,
+                        'mood': mood.lower()
+                    })
+        else:
+            # 使用旧格式解析，情绪默认为 gentle
+            for idx, (speaker, text) in enumerate(old_matches, 1):
+                text = self._clean_text(text)
+                if text:
+                    dialogues.append({
+                        'index': idx,
+                        'speaker': speaker.lower(),
+                        'text': text,
+                        'mood': 'gentle'
+                    })
         
         return dialogues
     
@@ -1159,7 +1441,8 @@ class AudioVideoPipeline:
                     speaker=d['speaker'],
                     text=d['text'],
                     audio_path=audio_path,
-                    duration=duration
+                    duration=duration,
+                    mood=d.get('mood', 'gentle')
                 ))
         
         return segments
@@ -1176,12 +1459,12 @@ class AudioVideoPipeline:
         return text
 
 
-def load_config(config_path: str = "video_generator_config.yaml") -> Dict:
+def load_config(config_path: str = "configs/video/config.yaml") -> Dict:
     """加载配置文件"""
     default_config = {
         'audio_dir': 'audio_output',
-        'markdown_file': '文献解读对话文案-2.md',
-        'output_dir': 'output',
+        'markdown_file': 'paperwork_in/文献解读对话文案-2.md',
+        'output_dir': 'broadcast_output',
         'output_filename': '',
         'resolution': {'width': 1920, 'height': 1080},
         'fps': 30,
@@ -1191,12 +1474,19 @@ def load_config(config_path: str = "video_generator_config.yaml") -> Dict:
         'title': '',
         'subtitle': '对话式科普播客',
         'transition_duration': 0.5,
-        'male_avatar': 'male.png',
-        'female_avatar': 'female.png',
+        'male_avatar': 'avatar/male.png',
+        'female_avatar': 'avatar/female.png',
         'male_name': 'Alex',
         'female_name': 'Cherry',
         'subtitle_style': 'default',
         'font_size': 40,
+        'enable_mood': True,  # 情绪功能开关，默认开启
+        'avatar_base_path': 'avatar',  # 立绘基础路径
+        'galgame_avatar': {  # GalGame 风格立绘配置
+            'height_ratio': 0.45,  # 立绘高度占屏幕比例（默认 45%）
+            'horizontal_position': 0.7,  # 水平位置（0.0=左, 0.5=中, 1.0=右）
+            'vertical_offset': -20,  # 垂直偏移（像素，负值向上）
+        },
     }
     
     if os.path.exists(config_path):
@@ -1210,7 +1500,7 @@ def load_config(config_path: str = "video_generator_config.yaml") -> Dict:
             print(f"⚠️  加载配置文件失败: {e}，使用默认配置")
     else:
         print(f"⚠️  未找到配置文件 {config_path}，使用默认配置")
-        print(f"   提示: 复制 video_generator_config.yaml 进行修改")
+        print(f"   提示: 复制 configs/video/config.yaml.example 进行修改")
     
     return default_config
 
@@ -1226,22 +1516,23 @@ def main():
   python video_generator.py
   
   # 方式2: 指定配置文件路径
-  python video_generator.py -c my_config.yaml
+  python video_generator.py -c configs/video/my_config.yaml
   
   # 方式3: 命令行参数覆盖配置
   python video_generator.py -i audio_output -m 文献.md
 
 提示:
-  • 首次使用请复制 video_generator_config.yaml.example 为 video_generator_config.yaml
+  • 首次使用请复制 configs/video/config.yaml.example 为 configs/video/config.yaml
   • 音频文件命名格式: dialogue_001_male.wav, dialogue_002_female.wav
   • 男声显示 Alex 头像(蓝色)，女声显示 Cherry 头像(粉色)
+  • 支持情绪立绘: 在对话脚本中添加 mood 标签，如 ### happy ###
         """
     )
     
     parser.add_argument(
         '-c', '--config',
-        default='video_generator_config.yaml',
-        help='配置文件路径 (默认: video_generator_config.yaml)'
+        default='configs/video/config.yaml',
+        help='配置文件路径 (默认: configs/video/config.yaml)'
     )
     parser.add_argument(
         '-i', '--input',
@@ -1287,6 +1578,22 @@ def main():
         return
     
     # 检查必要参数
+    # 如果 audio_dir 是 tts_output，尝试查找最新的时间编号子文件夹
+    audio_dir = config['audio_dir']
+    if audio_dir == 'tts_output' and os.path.exists(audio_dir):
+        try:
+            subdirs = [d for d in os.listdir(audio_dir) 
+                      if os.path.isdir(os.path.join(audio_dir, d)) and d[0].isdigit()]
+            if subdirs:
+                # 按名称排序获取最新的时间文件夹
+                subdirs.sort(reverse=True)
+                latest_subdir = subdirs[0]
+                audio_dir = os.path.join(audio_dir, latest_subdir)
+                print(f"📁 自动使用最新的 TTS 输出目录: {audio_dir}")
+        except Exception:
+            pass
+    config['audio_dir'] = audio_dir
+    
     if not os.path.exists(config['audio_dir']):
         print(f"❌ 错误: 找不到音频目录 '{config['audio_dir']}'")
         print(f"   请先运行: python tts_generator.py {config['markdown_file']}")
@@ -1316,6 +1623,9 @@ def main():
         'subtitle': config['subtitle'],
         'subtitle_style': config.get('subtitle_style', 'default'),
         'font_size': config.get('font_size', 40),
+        'enable_mood': config.get('enable_mood', True),
+        'avatar_base_path': config.get('avatar_base_path', 'avatar'),
+        'galgame_avatar': config.get('galgame_avatar', {}),
     }
     
     # 运行流程
